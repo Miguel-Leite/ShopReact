@@ -1,5 +1,6 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import Image from "next/image";
+import React, { useState, useEffect, useCallback } from "react";
 
 interface ProductImage {
   id: number;
@@ -86,7 +87,7 @@ export default function ProductPage() {
   const [isLoadingCep, setIsLoadingCep] = useState<boolean>(false);
   const [isAddingToCart, setIsAddingToCart] = useState<boolean>(false);
 
-  useEffect(() => {
+  const loadSavedData = useCallback(() => {
     const savedData = localStorage.getItem("productPageData");
     if (savedData) {
       try {
@@ -114,7 +115,11 @@ export default function ProductPage() {
         console.error("Erro ao ler dados salvos:", error);
       }
     }
-  }, []);
+  }, [productData.images]);
+
+  useEffect(() => {
+    loadSavedData();
+  }, [loadSavedData]);
 
   useEffect(() => {
     const dataToSave = {
@@ -149,7 +154,7 @@ export default function ProductPage() {
       } else {
         setAddress(data);
       }
-    } catch (error) {
+    } catch {
       setCepError("Erro ao consultar CEP. Tente novamente.");
       setAddress(null);
     } finally {
@@ -188,11 +193,13 @@ export default function ProductPage() {
       <div className="flex flex-col md:flex-row gap-8">
         <div className="md:w-2/5">
           <div className="bg-white rounded-lg shadow-md overflow-hidden mb-4">
-            <img
+            <Image
               src={mainImage.url}
               alt={mainImage.title}
+              width={600}
+              height={600}
               className="w-full h-96 object-contain p-4"
-              loading="lazy"
+              priority
             />
           </div>
 
@@ -208,11 +215,12 @@ export default function ProductPage() {
                 }`}
                 aria-label={`Visualizar ${image.title}`}
               >
-                <img
+                <Image
                   src={image.url}
                   alt={`Miniatura ${image.title}`}
+                  width={150}
+                  height={150}
                   className="w-full h-20 object-cover"
-                  loading="lazy"
                 />
               </button>
             ))}
