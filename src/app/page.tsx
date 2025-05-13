@@ -1,8 +1,44 @@
 "use client";
 import React, { useState, useEffect } from "react";
 
-export default function Home() {
-  const productData = {
+interface ProductImage {
+  id: number;
+  url: string;
+  title: string;
+}
+
+interface ProductColor {
+  id: number;
+  name: string;
+  code: string;
+}
+
+interface ProductData {
+  id: string;
+  title: string;
+  description: string;
+  price: number;
+  discountPrice: number;
+  images: ProductImage[];
+  sizes: string[];
+  colors: ProductColor[];
+  stock: number;
+  rating: number;
+  reviews: number;
+}
+
+interface AddressData {
+  cep: string;
+  logradouro?: string;
+  complemento?: string;
+  bairro?: string;
+  localidade?: string;
+  uf?: string;
+  erro?: boolean;
+}
+
+export default function ProductPage() {
+  const productData: ProductData = {
     id: "12345",
     title: "Tênis Esportivo Premium",
     description:
@@ -38,37 +74,44 @@ export default function Home() {
     reviews: 128,
   };
 
-  const [mainImage, setMainImage] = useState(productData.images[0]);
-  const [selectedSize, setSelectedSize] = useState("");
-  const [selectedColor, setSelectedColor] = useState("");
-  const [quantity, setQuantity] = useState(1);
-  const [cep, setCep] = useState("");
-  const [address, setAddress] = useState(null);
-  const [cepError, setCepError] = useState("");
-  const [isLoadingCep, setIsLoadingCep] = useState(false);
+  const [mainImage, setMainImage] = useState<ProductImage>(
+    productData.images[0]
+  );
+  const [selectedSize, setSelectedSize] = useState<string>("");
+  const [selectedColor, setSelectedColor] = useState<string>("");
+  const [quantity, setQuantity] = useState<number>(1);
+  const [cep, setCep] = useState<string>("");
+  const [address, setAddress] = useState<AddressData | null>(null);
+  const [cepError, setCepError] = useState<string>("");
+  const [isLoadingCep, setIsLoadingCep] = useState<boolean>(false);
+  const [isAddingToCart, setIsAddingToCart] = useState<boolean>(false);
 
   useEffect(() => {
     const savedData = localStorage.getItem("productPageData");
     if (savedData) {
-      const parsedData = JSON.parse(savedData);
-      const savedTime = new Date(parsedData.timestamp);
-      const now = new Date();
+      try {
+        const parsedData = JSON.parse(savedData);
+        const savedTime = new Date(parsedData.timestamp);
+        const now = new Date();
 
-      if (now.getTime() - savedTime.getTime() < 15 * 60 * 1000) {
-        setSelectedSize(parsedData.selectedSize || "");
-        setSelectedColor(parsedData.selectedColor || "");
-        setQuantity(parsedData.quantity || 1);
-        setCep(parsedData.cep || "");
-        setAddress(parsedData.address || null);
+        if (now.getTime() - savedTime.getTime() < 15 * 60 * 1000) {
+          setSelectedSize(parsedData.selectedSize || "");
+          setSelectedColor(parsedData.selectedColor || "");
+          setQuantity(parsedData.quantity || 1);
+          setCep(parsedData.cep || "");
+          setAddress(parsedData.address || null);
 
-        if (parsedData.mainImageId) {
-          const savedImage = productData.images.find(
-            (img) => img.id === parsedData.mainImageId
-          );
-          if (savedImage) setMainImage(savedImage);
+          if (parsedData.mainImageId) {
+            const savedImage = productData.images.find(
+              (img) => img.id === parsedData.mainImageId
+            );
+            if (savedImage) setMainImage(savedImage);
+          }
+        } else {
+          localStorage.removeItem("productPageData");
         }
-      } else {
-        localStorage.removeItem("productPageData");
+      } catch (error) {
+        console.error("Erro ao ler dados salvos:", error);
       }
     }
   }, []);
@@ -86,7 +129,7 @@ export default function Home() {
     localStorage.setItem("productPageData", JSON.stringify(dataToSave));
   }, [mainImage, selectedSize, selectedColor, quantity, cep, address]);
 
-  const handleCepSearch = async (e: { preventDefault: () => void }) => {
+  const handleCepSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!cep || cep.length !== 8 || !/^\d+$/.test(cep)) {
       setCepError("CEP inválido. Digite 8 números.");
@@ -98,7 +141,7 @@ export default function Home() {
 
     try {
       const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
-      const data = await response.json();
+      const data: AddressData = await response.json();
 
       if (data.erro) {
         setCepError("CEP não encontrado.");
@@ -121,6 +164,25 @@ export default function Home() {
     }
   };
 
+  const handleAddToCart = () => {
+    if (!selectedSize || !selectedColor) {
+      alert(
+        "Por favor, selecione tamanho e cor antes de adicionar ao carrinho"
+      );
+      return;
+    }
+
+    setIsAddingToCart(true);
+    setTimeout(() => {
+      alert(
+        `Produto adicionado ao carrinho!\n\nTamanho: ${selectedSize}\nCor: ${
+          productData.colors.find((c) => c.code === selectedColor)?.name
+        }\nQuantidade: ${quantity}`
+      );
+      setIsAddingToCart(false);
+    }, 1000);
+  };
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       <div className="flex flex-col md:flex-row gap-8">
@@ -128,8 +190,9 @@ export default function Home() {
           <div className="bg-white rounded-lg shadow-md overflow-hidden mb-4">
             <img
               src={mainImage.url}
-              alt={productData.title}
-              className="w-full h-auto object-cover"
+              alt={mainImage.title}
+              className="w-full h-96 object-contain p-4"
+              loading="lazy"
             />
           </div>
 
@@ -143,11 +206,13 @@ export default function Home() {
                     ? "border-blue-500 scale-105"
                     : "border-gray-200 hover:border-gray-300"
                 }`}
+                aria-label={`Visualizar ${image.title}`}
               >
                 <img
                   src={image.url}
-                  alt={`Miniatura ${image.id}`}
-                  className="w-full h-auto object-cover"
+                  alt={`Miniatura ${image.title}`}
+                  className="w-full h-20 object-cover"
+                  loading="lazy"
                 />
               </button>
             ))}
@@ -191,7 +256,7 @@ export default function Home() {
                 R$ {productData.discountPrice.toFixed(2)}
               </span>
               {productData.discountPrice < productData.price && (
-                <span className="ml-2 text-lg text-gray-500 line-through">
+                <span className="ml-2 text-lg text-gray-400 line-through">
                   R$ {productData.price.toFixed(2)}
                 </span>
               )}
@@ -204,10 +269,14 @@ export default function Home() {
                 </span>
               )}
             </div>
-            <p className="text-green-600 font-medium mt-1">
+            <p
+              className={`font-medium mt-1 ${
+                productData.stock > 10 ? "text-green-500" : "text-yellow-500"
+              }`}
+            >
               {productData.stock > 10
                 ? "Em estoque"
-                : `Apenas ${productData.stock} unidades!`}
+                : `Últimas ${productData.stock} unidades!`}
             </p>
           </div>
 
@@ -218,10 +287,10 @@ export default function Home() {
                 <button
                   key={size}
                   onClick={() => setSelectedSize(size)}
-                  className={`px-4 py-2 border rounded-md ${
+                  className={`px-4 py-2 border rounded-md transition-colors ${
                     selectedSize === size
-                      ? "bg-blue-500 text-white border-blue-500"
-                      : "bg-white text-gray-800 border-gray-300 hover:bg-gray-50"
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "bg-zinc-800 text-zinc-200 border-zinc-600 hover:bg-zinc-700"
                   }`}
                 >
                   {size}
@@ -237,13 +306,14 @@ export default function Home() {
                 <button
                   key={color.id}
                   onClick={() => setSelectedColor(color.code)}
-                  className={`w-10 h-10 rounded-full border-2 flex items-center justify-center ${
+                  className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all ${
                     selectedColor === color.code
-                      ? "border-blue-500"
-                      : "border-gray-300"
+                      ? "border-blue-500 scale-110"
+                      : "border-zinc-400 hover:border-zinc-200"
                   }`}
                   style={{ backgroundColor: color.code }}
                   title={color.name}
+                  aria-label={color.name}
                 >
                   {selectedColor === color.code && (
                     <svg
@@ -270,17 +340,17 @@ export default function Home() {
             <div className="flex items-center">
               <button
                 onClick={() => adjustQuantity(-1)}
-                className="bg-gray-200 text-gray-700 px-3 py-1 rounded-l-md hover:bg-gray-300"
+                className="bg-zinc-700 text-zinc-200 px-3 py-1 rounded-l-md hover:bg-zinc-600 disabled:opacity-50"
                 disabled={quantity <= 1}
               >
                 -
               </button>
-              <span className="bg-zinc-100 text-zinc-700 px-4 py-1">
+              <span className="bg-zinc-800 text-white px-4 py-1">
                 {quantity}
               </span>
               <button
                 onClick={() => adjustQuantity(1)}
-                className="bg-gray-200 text-gray-700 px-3 py-1 rounded-r-md hover:bg-gray-300"
+                className="bg-zinc-700 text-zinc-200 px-3 py-1 rounded-r-md hover:bg-zinc-600 disabled:opacity-50"
                 disabled={quantity >= productData.stock}
               >
                 +
@@ -292,15 +362,49 @@ export default function Home() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 mb-8">
-            <button className="bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-md font-medium flex-1 transition-colors">
+            <button
+              className="bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-md font-medium flex-1 transition-colors"
+              onClick={() => alert("Compra rápida não implementada")}
+            >
               Comprar agora
             </button>
-            <button className="bg-yellow-400 hover:bg-yellow-500 text-white py-3 px-6 rounded-md font-medium flex-1 transition-colors">
-              Adicionar ao carrinho
+            <button
+              className="bg-yellow-500 hover:bg-yellow-600 text-white py-3 px-6 rounded-md font-medium flex-1 transition-colors disabled:opacity-75"
+              onClick={handleAddToCart}
+              disabled={isAddingToCart}
+            >
+              {isAddingToCart ? (
+                <span className="flex items-center justify-center">
+                  <svg
+                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Adicionando...
+                </span>
+              ) : (
+                "Adicionar ao carrinho"
+              )}
             </button>
           </div>
 
-          <div className="border-t pt-6">
+          {/* Consulta de CEP */}
+          <div className="border-t border-zinc-700 pt-6">
             <h3 className="text-lg font-medium text-white mb-3">
               Calcular frete e prazo
             </h3>
@@ -311,28 +415,49 @@ export default function Home() {
                 onChange={(e) => setCep(e.target.value.replace(/\D/g, ""))}
                 placeholder="Digite seu CEP"
                 maxLength={8}
-                className="flex-1 border border-zinc-800 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 border border-zinc-600 bg-zinc-800 text-white rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <button
                 type="submit"
-                className="bg-gray-200 text-zinc-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors"
+                className="bg-zinc-700 hover:bg-zinc-600 text-white px-4 py-2 rounded-md transition-colors disabled:opacity-50"
                 disabled={isLoadingCep}
               >
                 {isLoadingCep ? "Consultando..." : "Calcular"}
               </button>
             </form>
 
-            {cepError && <p className="text-red-500 mt-2">{cepError}</p>}
+            {cepError && (
+              <p className="text-red-400 mt-2 flex items-center">
+                <svg
+                  className="w-4 h-4 mr-1"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                {cepError}
+              </p>
+            )}
 
             {address && (
-              <div className="mt-4 bg-gray-50 p-3 rounded-md">
-                <p className="font-medium">Endereço encontrado:</p>
-                {/* <p>{address.logradouro}, {address.bairro}</p>
-                <p>{address.localidade} - {address.uf}</p> */}
-                <p className="mt-2 text-green-600">
+              <div className="mt-4 bg-zinc-800 p-3 rounded-md">
+                <p className="font-medium text-white">Endereço encontrado:</p>
+                {address.logradouro && (
+                  <p className="text-zinc-300">
+                    {address.logradouro}, {address.bairro}
+                  </p>
+                )}
+                <p className="text-zinc-300">
+                  {address.localidade} - {address.uf}
+                </p>
+                <p className="mt-2 text-green-400 font-medium">
                   Frete disponível para esta região
                 </p>
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-zinc-400">
                   Prazo estimado: 3-5 dias úteis
                 </p>
               </div>
