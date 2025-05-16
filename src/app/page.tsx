@@ -1,6 +1,7 @@
 "use client";
 import Image from "next/image";
-import React, { useState, useEffect, useCallback } from "react";
+import { useFormik } from "formik";
+import React, { useEffect } from "react";
 
 interface ProductImage {
   id: number;
@@ -38,6 +39,15 @@ interface AddressData {
   erro?: boolean;
 }
 
+interface FormValues {
+  mainImageId: number;
+  selectedSize: string;
+  selectedColor: string;
+  quantity: number;
+  cep: string;
+  address: AddressData | null;
+}
+
 export default function ProductPage() {
   const productData: ProductData = {
     id: "12345",
@@ -49,17 +59,17 @@ export default function ProductPage() {
     images: [
       {
         id: 1,
-        url: "https://m.media-amazon.com/images/I/51JOXDYNeXL._AC_SY500_.jpg",
+        url: "/AC_SY500_.jpg",
         title: "adidas Men's Barreda Sneaker",
       },
       {
         id: 2,
-        url: "https://m.media-amazon.com/images/I/71Ofnl+cw+L._AC_SX500_.jpg",
+        url: "/AC_SX500_.jpg",
         title: "adidas Men's Barricade Clay Tennis Shoe",
       },
       {
         id: 3,
-        url: "https://m.media-amazon.com/images/I/71DZ2p2173L._AC_SX500_.jpg",
+        url: "/_AC_SX500_.jpg",
         title: "adidas Men's Run Falcon 5 Sneaker",
       },
     ],
@@ -75,19 +85,28 @@ export default function ProductPage() {
     reviews: 128,
   };
 
-  const [mainImage, setMainImage] = useState<ProductImage>(
-    productData.images[0]
-  );
-  const [selectedSize, setSelectedSize] = useState<string>("");
-  const [selectedColor, setSelectedColor] = useState<string>("");
-  const [quantity, setQuantity] = useState<number>(1);
-  const [cep, setCep] = useState<string>("");
-  const [address, setAddress] = useState<AddressData | null>(null);
-  const [cepError, setCepError] = useState<string>("");
-  const [isLoadingCep, setIsLoadingCep] = useState<boolean>(false);
-  const [isAddingToCart, setIsAddingToCart] = useState<boolean>(false);
+  const initialValues: FormValues = {
+    mainImageId: productData.images[0].id,
+    selectedSize: "",
+    selectedColor: "",
+    quantity: 1,
+    cep: "",
+    address: null,
+  };
 
-  const loadSavedData = useCallback(() => {
+  const formik = useFormik({
+    initialValues,
+    onSubmit: async (values) => {
+      alert(`Produto adicionado ao carrinho!
+        Tamanho: ${values.selectedSize}
+        Cor: ${
+          productData.colors.find((c) => c.code === values.selectedColor)?.name
+        }
+        Quantidade: ${values.quantity}`);
+    },
+  });
+
+  useEffect(() => {
     const savedData = localStorage.getItem("productPageData");
     if (savedData) {
       try {
@@ -96,18 +115,11 @@ export default function ProductPage() {
         const now = new Date();
 
         if (now.getTime() - savedTime.getTime() < 15 * 60 * 1000) {
-          setSelectedSize(parsedData.selectedSize || "");
-          setSelectedColor(parsedData.selectedColor || "");
-          setQuantity(parsedData.quantity || 1);
-          setCep(parsedData.cep || "");
-          setAddress(parsedData.address || null);
-
-          if (parsedData.mainImageId) {
-            const savedImage = productData.images.find(
-              (img) => img.id === parsedData.mainImageId
-            );
-            if (savedImage) setMainImage(savedImage);
-          }
+          formik.setValues({
+            ...formik.values,
+            ...parsedData,
+            address: parsedData.address || null,
+          });
         } else {
           localStorage.removeItem("productPageData");
         }
@@ -115,78 +127,57 @@ export default function ProductPage() {
         console.error("Erro ao ler dados salvos:", error);
       }
     }
-  }, [productData.images]);
-
-  useEffect(() => {
-    loadSavedData();
-  }, [loadSavedData]);
+  }, []);
 
   useEffect(() => {
     const dataToSave = {
-      mainImageId: mainImage.id,
-      selectedSize,
-      selectedColor,
-      quantity,
-      cep,
-      address,
+      ...formik.values,
       timestamp: new Date().toISOString(),
     };
     localStorage.setItem("productPageData", JSON.stringify(dataToSave));
-  }, [mainImage, selectedSize, selectedColor, quantity, cep, address]);
+  }, [formik.values]);
 
   const handleCepSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cep || cep.length !== 8 || !/^\d+$/.test(cep)) {
-      setCepError("CEP inválido. Digite 8 números.");
+    if (
+      !formik.values.cep ||
+      formik.values.cep.length !== 8 ||
+      !/^\d+$/.test(formik.values.cep)
+    ) {
+      formik.setFieldError("cep", "CEP inválido. Digite 8 números.");
       return;
     }
 
-    setCepError("");
-    setIsLoadingCep(true);
+    formik.setFieldError("cep", "");
 
     try {
-      const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const response = await fetch(
+        `https://viacep.com.br/ws/${formik.values.cep}/json/`
+      );
       const data: AddressData = await response.json();
 
       if (data.erro) {
-        setCepError("CEP não encontrado.");
-        setAddress(null);
+        formik.setFieldError("cep", "CEP não encontrado.");
+        formik.setFieldValue("address", null);
       } else {
-        setAddress(data);
+        formik.setFieldValue("address", data);
       }
     } catch {
-      setCepError("Erro ao consultar CEP. Tente novamente.");
-      setAddress(null);
-    } finally {
-      setIsLoadingCep(false);
+      formik.setFieldError("cep", "Erro ao consultar CEP. Tente novamente.");
+      formik.setFieldValue("address", null);
     }
   };
 
   const adjustQuantity = (amount: number) => {
-    const newQuantity = quantity + amount;
+    const newQuantity = formik.values.quantity + amount;
     if (newQuantity > 0 && newQuantity <= productData.stock) {
-      setQuantity(newQuantity);
+      formik.setFieldValue("quantity", newQuantity);
     }
   };
 
-  const handleAddToCart = () => {
-    if (!selectedSize || !selectedColor) {
-      alert(
-        "Por favor, selecione tamanho e cor antes de adicionar ao carrinho"
-      );
-      return;
-    }
-
-    setIsAddingToCart(true);
-    setTimeout(() => {
-      alert(
-        `Produto adicionado ao carrinho!\n\nTamanho: ${selectedSize}\nCor: ${
-          productData.colors.find((c) => c.code === selectedColor)?.name
-        }\nQuantidade: ${quantity}`
-      );
-      setIsAddingToCart(false);
-    }, 1000);
-  };
+  const mainImage =
+    productData.images.find((img) => img.id === formik.values.mainImageId) ||
+    productData.images[0];
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
@@ -207,9 +198,9 @@ export default function ProductPage() {
             {productData.images.map((image) => (
               <button
                 key={image.id}
-                onClick={() => setMainImage(image)}
+                onClick={() => formik.setFieldValue("mainImageId", image.id)}
                 className={`border-2 rounded overflow-hidden transition-all ${
-                  mainImage.id === image.id
+                  formik.values.mainImageId === image.id
                     ? "border-blue-500 scale-105"
                     : "border-gray-200 hover:border-gray-300"
                 }`}
@@ -294,9 +285,10 @@ export default function ProductPage() {
               {productData.sizes.map((size) => (
                 <button
                   key={size}
-                  onClick={() => setSelectedSize(size)}
+                  type="button"
+                  onClick={() => formik.setFieldValue("selectedSize", size)}
                   className={`px-4 py-2 border rounded-md transition-colors ${
-                    selectedSize === size
+                    formik.values.selectedSize === size
                       ? "bg-blue-600 text-white border-blue-600"
                       : "bg-zinc-800 text-zinc-200 border-zinc-600 hover:bg-zinc-700"
                   }`}
@@ -313,9 +305,12 @@ export default function ProductPage() {
               {productData.colors.map((color) => (
                 <button
                   key={color.id}
-                  onClick={() => setSelectedColor(color.code)}
+                  type="button"
+                  onClick={() =>
+                    formik.setFieldValue("selectedColor", color.code)
+                  }
                   className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all ${
-                    selectedColor === color.code
+                    formik.values.selectedColor === color.code
                       ? "border-blue-500 scale-110"
                       : "border-zinc-400 hover:border-zinc-200"
                   }`}
@@ -323,7 +318,7 @@ export default function ProductPage() {
                   title={color.name}
                   aria-label={color.name}
                 >
-                  {selectedColor === color.code && (
+                  {formik.values.selectedColor === color.code && (
                     <svg
                       className="w-5 h-5 text-white"
                       fill="none"
@@ -347,19 +342,21 @@ export default function ProductPage() {
             <h3 className="text-lg font-medium text-white mb-2">Quantidade</h3>
             <div className="flex items-center">
               <button
+                type="button"
                 onClick={() => adjustQuantity(-1)}
                 className="bg-zinc-700 text-zinc-200 px-3 py-1 rounded-l-md hover:bg-zinc-600 disabled:opacity-50"
-                disabled={quantity <= 1}
+                disabled={formik.values.quantity <= 1}
               >
                 -
               </button>
               <span className="bg-zinc-800 text-white px-4 py-1">
-                {quantity}
+                {formik.values.quantity}
               </span>
               <button
+                type="button"
                 onClick={() => adjustQuantity(1)}
                 className="bg-zinc-700 text-zinc-200 px-3 py-1 rounded-r-md hover:bg-zinc-600 disabled:opacity-50"
-                disabled={quantity >= productData.stock}
+                disabled={formik.values.quantity >= productData.stock}
               >
                 +
               </button>
@@ -369,19 +366,27 @@ export default function ProductPage() {
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 mb-8">
+          <form
+            onSubmit={formik.handleSubmit}
+            className="flex flex-col sm:flex-row gap-3 mb-8"
+          >
             <button
+              type="button"
               className="bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-md font-medium flex-1 transition-colors"
               onClick={() => alert("Compra rápida não implementada")}
             >
               Comprar agora
             </button>
             <button
+              type="submit"
               className="bg-yellow-500 hover:bg-yellow-600 text-white py-3 px-6 rounded-md font-medium flex-1 transition-colors disabled:opacity-75"
-              onClick={handleAddToCart}
-              disabled={isAddingToCart}
+              disabled={
+                !formik.values.selectedSize ||
+                !formik.values.selectedColor ||
+                formik.isSubmitting
+              }
             >
-              {isAddingToCart ? (
+              {formik.isSubmitting ? (
                 <span className="flex items-center justify-center">
                   <svg
                     className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
@@ -409,9 +414,8 @@ export default function ProductPage() {
                 "Adicionar ao carrinho"
               )}
             </button>
-          </div>
+          </form>
 
-          {/* Consulta de CEP */}
           <div className="border-t border-zinc-700 pt-6">
             <h3 className="text-lg font-medium text-white mb-3">
               Calcular frete e prazo
@@ -419,8 +423,9 @@ export default function ProductPage() {
             <form onSubmit={handleCepSearch} className="flex gap-2">
               <input
                 type="text"
-                value={cep}
-                onChange={(e) => setCep(e.target.value.replace(/\D/g, ""))}
+                name="cep"
+                value={formik.values.cep}
+                onChange={formik.handleChange}
                 placeholder="Digite seu CEP"
                 maxLength={8}
                 className="flex-1 border border-zinc-600 bg-zinc-800 text-white rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -428,13 +433,13 @@ export default function ProductPage() {
               <button
                 type="submit"
                 className="bg-zinc-700 hover:bg-zinc-600 text-white px-4 py-2 rounded-md transition-colors disabled:opacity-50"
-                disabled={isLoadingCep}
+                disabled={!formik.values.cep || formik.values.cep.length !== 8}
               >
-                {isLoadingCep ? "Consultando..." : "Calcular"}
+                Calcular
               </button>
             </form>
 
-            {cepError && (
+            {formik.errors.cep && (
               <p className="text-red-400 mt-2 flex items-center">
                 <svg
                   className="w-4 h-4 mr-1"
@@ -447,20 +452,22 @@ export default function ProductPage() {
                     clipRule="evenodd"
                   />
                 </svg>
-                {cepError}
+                {formik.errors.cep}
               </p>
             )}
 
-            {address && (
+            {formik.values.address && (
               <div className="mt-4 bg-zinc-800 p-3 rounded-md">
                 <p className="font-medium text-white">Endereço encontrado:</p>
-                {address.logradouro && (
+                {formik.values.address.logradouro && (
                   <p className="text-zinc-300">
-                    {address.logradouro}, {address.bairro}
+                    {formik.values.address.logradouro},{" "}
+                    {formik.values.address.bairro}
                   </p>
                 )}
                 <p className="text-zinc-300">
-                  {address.localidade} - {address.uf}
+                  {formik.values.address.localidade} -{" "}
+                  {formik.values.address.uf}
                 </p>
                 <p className="mt-2 text-green-400 font-medium">
                   Frete disponível para esta região
